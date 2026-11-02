@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "api-sentinel"
+version = "0.1.0"
+description = "Autonomous synthetic API health, latency, and SLA reliability monitoring engine with zero external dependencies"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Abrar892", email = "m.abrar.j40@gmail.com" }
+]
+keywords = [
+    "api-monitoring",
+    "synthetic-testing",
+    "health-check",
+    "sla-tracker",
+    "latency-metrics",
+    "ci-cd-quality-gate"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Topic :: System :: Monitoring",
+    "Topic :: Software Development :: Testing",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License"
+]
+
+[project.scripts]
+api-sentinel = "api_sentinel.cli:main"
+sentinel = "api_sentinel.cli:main"
