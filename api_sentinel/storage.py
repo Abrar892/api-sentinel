@@ -7,8 +7,9 @@ import math
 import os
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 from .models import AssertionResult, HealthStatus, IncidentRecord, ProbeResult, TargetMetrics
 
@@ -36,15 +37,19 @@ class SentinelStorage:
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self._init_schema()
 
-    def _get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connection(self) -> Generator[sqlite3.Connection, None, None]:
         conn = sqlite3.connect(self.db_path, timeout=30.0)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA foreign_keys=ON;")
-        return conn
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA foreign_keys=ON;")
+            yield conn
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS probes (
@@ -97,7 +102,7 @@ class SentinelStorage:
 
     def save_probe_result(self, result: ProbeResult) -> int:
         """Persist a single probe observation and its assertion outcomes."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 """
@@ -190,7 +195,7 @@ class SentinelStorage:
         self, target_id: Optional[str] = None, limit: int = 50
     ) -> List[ProbeResult]:
         """Fetch recent probe results, optionally filtered by target."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cur = conn.cursor()
             if target_id:
                 cur.execute(
@@ -262,7 +267,7 @@ class SentinelStorage:
         self, target_id: str, target_name: str, since_timestamp: Optional[str] = None
     ) -> TargetMetrics:
         """Calculate aggregate latency percentiles and uptime statistics."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cur = conn.cursor()
             query = """
                 SELECT status, latency_ms, timestamp
@@ -315,7 +320,7 @@ class SentinelStorage:
 
     def get_open_incidents(self) -> List[IncidentRecord]:
         """Retrieve unresolved system incidents."""
-        with self._get_connection() as conn:
+        with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 """
