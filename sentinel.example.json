@@ -1,0 +1,59 @@
+{
+  "name": "Production Microservices Sentinel",
+  "environment": "production",
+  "db_path": ".sentinel/sentinel.db",
+  "concurrency": 4,
+  "targets": [
+    {
+      "id": "auth-service-health",
+      "name": "Auth Service Healthcheck",
+      "url": "https://httpbin.org/status/200",
+      "method": "GET",
+      "timeout_seconds": 5.0,
+      "max_retries": 2,
+      "retry_backoff_ms": 250,
+      "sla_latency_threshold_ms": 400.0,
+      "assertions": [
+        {
+          "rule_type": "status_code",
+          "expected": 200,
+          "operator": "eq"
+        },
+        {
+          "rule_type": "max_latency_ms",
+          "expected": 500.0,
+          "operator": "lte"
+        }
+      ]
+    },
+    {
+      "id": "payments-gateway-api",
+      "name": "Payments Synthetic Probe",
+      "url": "https://httpbin.org/json",
+      "method": "GET",
+      "timeout_seconds": 6.0,
+      "max_retries": 1,
+      "retry_backoff_ms": 300,
+      "sla_latency_threshold_ms": 600.0,
+      "assertions": [
+        {
+          "rule_type": "status_code",
+          "expected": 200,
+          "operator": "eq"
+        },
+        {
+          "rule_type": "header_match",
+          "field_name": "content-type",
+          "expected": "application/json",
+          "operator": "contains"
+        },
+        {
+          "rule_type": "json_path",
+          "field_name": "slideshow.author",
+          "expected": "Yours Truly",
+          "operator": "eq"
+        }
+      ]
+    }
+  ]
+}
