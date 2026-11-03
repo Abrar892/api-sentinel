@@ -7,11 +7,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
+from .alerts import AlertDispatcher
 from .assertions import AssertionEngine
 from .config import AssertionRule, TargetConfig
 from .http_client import HttpClient, RawResponse
 from .models import AssertionResult, HealthStatus, ProbeResult
 from .storage import SentinelStorage
+from .ws_client import WebSocketClient
 
 
 class ProbeExecutor:
@@ -21,9 +23,11 @@ class ProbeExecutor:
         self,
         storage: Optional[SentinelStorage] = None,
         on_probe_complete: Optional[Callable[[ProbeResult], None]] = None,
+        alert_dispatcher: Optional[AlertDispatcher] = None,
     ):
         self.storage = storage
         self.on_probe_complete = on_probe_complete
+        self.alert_dispatcher = alert_dispatcher
 
     def probe_target(self, target: TargetConfig) -> ProbeResult:
         """Execute probe for a single target, with retry and backoff on transient failures."""
@@ -31,19 +35,28 @@ class ProbeExecutor:
         max_attempts = target.max_retries + 1
         last_response: Optional[RawResponse] = None
         last_error: Optional[str] = None
+        is_ws = target.url.lower().startswith(("ws://", "wss://"))
 
         while attempts < max_attempts:
             attempts += 1
-            response = HttpClient.execute_request(
-                url=target.url,
-                method=target.method,
-                headers=target.headers,
-                body=target.body,
-                timeout_seconds=target.timeout_seconds,
-            )
+            if is_ws:
+                response = WebSocketClient.probe(
+                    url=target.url,
+                    timeout_seconds=target.timeout_seconds,
+                    headers=target.headers,
+                    send_payload=target.ws_payload,
+                )
+            else:
+                response = HttpClient.execute_request(
+                    url=target.url,
+                    method=target.method,
+                    headers=target.headers,
+                    body=target.body,
+                    timeout_seconds=target.timeout_seconds,
+                )
             last_response = response
 
-            # If request succeeded with an HTTP response (even 4xx/5xx), stop retry loop
+            # If request succeeded with an HTTP/WS response, stop retry loop
             if response.status_code is not None:
                 break
 
@@ -60,7 +73,7 @@ class ProbeExecutor:
                 target_id=target.id,
                 target_name=target.name,
                 url=target.url,
-                method=target.method,
+                method="WS" if is_ws else target.method,
                 status_code=None,
                 latency_ms=last_response.latency_ms if last_response else 0.0,
                 timestamp=timestamp,
@@ -74,9 +87,10 @@ class ProbeExecutor:
             # Evaluate all configured assertion rules
             rules = list(target.assertions)
 
-            # If no assertions configured, inject default status 200 rule
+            # If no assertions configured, inject default status rule (101 for WS, 200 for HTTP)
             if not rules:
-                rules.append(AssertionRule(rule_type="status_code", expected=200, operator="eq"))
+                expected_status = 101 if is_ws else 200
+                rules.append(AssertionRule(rule_type="status_code", expected=expected_status, operator="eq"))
 
             assertion_results = AssertionEngine.evaluate_all(
                 rules=rules,
@@ -120,7 +134,7 @@ class ProbeExecutor:
                 target_id=target.id,
                 target_name=target.name,
                 url=target.url,
-                method=target.method,
+                method="WS" if is_ws else target.method,
                 status_code=last_response.status_code,
                 latency_ms=last_response.latency_ms,
                 timestamp=timestamp,
@@ -136,8 +150,22 @@ class ProbeExecutor:
         if self.storage:
             try:
                 self.storage.save_probe_result(result)
-            except Exception as storage_err:
-                # Storage persistence failure should not abort monitoring
+            except Exception:
+                pass
+
+        # Dispatch webhook alert on failure
+        if self.alert_dispatcher and result.status == HealthStatus.UNHEALTHY:
+            try:
+                self.alert_dispatcher.dispatch_incident_event(
+                    event_type="incident.detected",
+                    target_id=result.target_id,
+                    target_name=result.target_name,
+                    url=result.url,
+                    status=result.status,
+                    details=result.error or "Probe assertion failure",
+                    timestamp=result.timestamp,
+                )
+            except Exception:
                 pass
 
         if self.on_probe_complete:

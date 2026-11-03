@@ -67,13 +67,14 @@ class AssertionRule:
 
 @dataclass
 class TargetConfig:
-    """Specification of an HTTP target to probe and validate."""
+    """Specification of an HTTP or WebSocket target to probe and validate."""
     id: str
     name: str
     url: str
     method: str = "GET"
     headers: Dict[str, str] = field(default_factory=dict)
     body: Optional[str] = None
+    ws_payload: Optional[str] = None
     timeout_seconds: float = 10.0
     max_retries: int = 1
     retry_backoff_ms: int = 200
@@ -92,11 +93,11 @@ class TargetConfig:
         if not parsed.scheme or not parsed.netloc:
             raise ConfigValidationError(
                 f"Target '{self.id}' has invalid URL: '{self.url}'. "
-                "Must include valid protocol (http/https) and host."
+                "Must include valid protocol (http/https/ws/wss) and host."
             )
-        if parsed.scheme not in ("http", "https"):
+        if parsed.scheme not in ("http", "https", "ws", "wss"):
             raise ConfigValidationError(
-                f"Target '{self.id}' protocol must be http or https, got: '{parsed.scheme}'"
+                f"Target '{self.id}' protocol must be http, https, ws, or wss, got: '{parsed.scheme}'"
             )
 
         if self.timeout_seconds <= 0:
@@ -123,6 +124,7 @@ class TargetConfig:
             method=data.get("method", "GET"),
             headers=data.get("headers", {}),
             body=data.get("body"),
+            ws_payload=data.get("ws_payload"),
             timeout_seconds=float(data.get("timeout_seconds", 10.0)),
             max_retries=int(data.get("max_retries", 1)),
             retry_backoff_ms=int(data.get("retry_backoff_ms", 200)),
@@ -138,6 +140,7 @@ class TargetConfig:
             "method": self.method,
             "headers": self.headers,
             "body": self.body,
+            "ws_payload": self.ws_payload,
             "timeout_seconds": self.timeout_seconds,
             "max_retries": self.max_retries,
             "retry_backoff_ms": self.retry_backoff_ms,
@@ -153,6 +156,7 @@ class MonitorConfig:
     environment: str = "production"
     db_path: str = ".sentinel/sentinel.db"
     concurrency: int = 4
+    webhook_alerts: List[str] = field(default_factory=list)
     targets: List[TargetConfig] = field(default_factory=list)
 
     def __post_init__(self):
@@ -178,6 +182,7 @@ class MonitorConfig:
             environment=data.get("environment", "production"),
             db_path=data.get("db_path", ".sentinel/sentinel.db"),
             concurrency=int(data.get("concurrency", 4)),
+            webhook_alerts=data.get("webhook_alerts", []),
             targets=targets,
         )
 
@@ -200,5 +205,6 @@ class MonitorConfig:
             "environment": self.environment,
             "db_path": self.db_path,
             "concurrency": self.concurrency,
+            "webhook_alerts": self.webhook_alerts,
             "targets": [t.to_dict() for t in self.targets],
         }
