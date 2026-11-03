@@ -4,8 +4,9 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-25%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-29%20passed-brightgreen.svg)]()
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-zero-success.svg)]()
+[![Version](https://img.shields.io/badge/version-0.2.0-indigo.svg)]()
 
 ---
 
@@ -25,8 +26,10 @@ Developers and DevOps engineers need a **lightweight, dependency-free, synthetic
 
 ## ✨ Features
 
-- **⚡ Zero External Dependencies:** Runs anywhere Python 3.10+ is installed using standard library modules (`urllib`, `sqlite3`, `concurrent.futures`, `dataclasses`, `http.server`).
-- **🎯 Multi-Target Concurrent Probing:** Probes dozens of HTTP/HTTPS endpoints concurrently with configurable worker pools and per-target timeouts.
+- **⚡ Zero External Dependencies:** Runs anywhere Python 3.10+ is installed using standard library modules (`urllib`, `sqlite3`, `socket`, `ssl`, `concurrent.futures`, `dataclasses`, `http.server`).
+- **🎯 Multi-Target Concurrent Probing:** Probes dozens of HTTP, HTTPS, and WebSocket (`ws://`, `wss://`) endpoints concurrently with configurable worker pools and per-target timeouts.
+- **🔌 RFC 6455 WebSocket Monitoring:** Native support for WebSocket upgrade handshakes, Sec-WebSocket-Key / Accept verification, Ping/Pong latency tracking, and custom payload frame assertions without third-party libraries.
+- **🔔 Webhook Incident Alerting:** Automatic real-time JSON alert dispatch to Slack, Discord, or custom webhook URLs upon target downtime or recovery.
 - **🔍 Deep Assertion Engine:**
   - Status code validation (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`).
   - High-precision latency threshold enforcement (millisecond resolution).
@@ -36,7 +39,7 @@ Developers and DevOps engineers need a **lightweight, dependency-free, synthetic
 - **📈 SLA & Latency Percentiles:** Tracks uptime percentages and calculates exact $p50$, $p95$, and $p99$ response times using linear interpolation.
 - **🚨 Intelligent State Tracking:**
   - `HEALTHY`: All assertions passed within SLA latency bounds.
-  - `DEGRADED`: Service is reachable with HTTP 2xx but latency violates SLA thresholds.
+  - `DEGRADED`: Service is reachable with HTTP 2xx / WS 101 but latency violates SLA thresholds.
   - `UNHEALTHY`: Network unreachable, HTTP 5xx errors, or assertion failures.
   - Auto-manages incident lifecycles (opening on failure, resolving on recovery).
 - **📊 Multi-Format Reporting:**
@@ -53,22 +56,26 @@ Developers and DevOps engineers need a **lightweight, dependency-free, synthetic
 api-sentinel/
 ├── api_sentinel/
 │   ├── __init__.py           # Package exports and semantic versioning
+│   ├── alerts.py             # Webhook incident notification dispatcher
 │   ├── assertions.py         # Rule evaluation engine (JSONPath, regex, headers)
 │   ├── cli.py                # Command-line entry points and argument parsing
 │   ├── config.py             # Schema definition, model validation, and loaders
-│   ├── engine.py             # Concurrent worker pool and retry backoff loop
+│   ├── engine.py             # Concurrent worker pool, WebSocket routing, and retry loop
 │   ├── http_client.py        # Urllib client with high-resolution latency timing
 │   ├── mock_server.py        # Embedded HTTP mock server for offline simulation
 │   ├── models.py             # Dataclass domain entities and status enums
 │   ├── reporter.py           # Terminal, JSON, and standalone SVG HTML generator
-│   └── storage.py            # SQLite time-series database and percentile math
+│   ├── storage.py            # SQLite time-series database and percentile math
+│   └── ws_client.py          # RFC 6455 WebSocket client probe (zero dependencies)
 ├── tests/
+│   ├── test_alerts.py        # Webhook alert dispatch tests
 │   ├── test_assertions.py    # Assertion engine unit tests
 │   ├── test_cli.py           # CLI subcommands and option tests
 │   ├── test_config.py        # Configuration validation and file loading tests
 │   ├── test_e2e.py           # End-to-end integration tests with mock daemon
 │   ├── test_reporter.py      # Terminal, JSON, and HTML report tests
-│   └── test_storage.py       # SQLite persistence and percentile aggregation tests
+│   ├── test_storage.py       # SQLite persistence and percentile aggregation tests
+│   └── test_ws.py            # RFC 6455 WebSocket framing, handshake & probe tests
 ├── sentinel.example.json     # Ready-to-use starter configuration template
 ├── pyproject.toml            # Modern PEP 518/621 packaging metadata
 └── README.md                 # System documentation and usage guide
@@ -227,8 +234,8 @@ OK
 
 ## ⚠️ Known Limitations
 
-- **WebSocket Probing:** Currently supports HTTP/1.1 and HTTP/2 endpoints over HTTP/HTTPS. Native WebSocket (`ws://`, `wss://`) streaming probes are planned for future versions.
 - **Authentication Handshakes:** Currently supports bearer tokens, API keys, and basic authentication via custom request headers. Multi-step OAuth2 redirect workflows require external pre-authenticated token generation.
+- **Binary Stream Decoding:** WebSocket payload assertions are optimized for UTF-8 text, JSON frames, and Ping/Pong health checks; custom Protobuf / MessagePack binary decoding requires custom client unpacking.
 
 ---
 
